@@ -1,0 +1,12 @@
+name: learn
+version: 0.1.0
+description: >-
+  Tools for the learn skills (teach / visualize): a graded `quiz` question with
+  instant feedback, and `md_log`, which mirrors a learning session into a
+  markdown notebook. Hermes port of the Pi extensions in amosblomqvist/learn.
+author: henrykrinkle01 (port), Amos Blomqvist (original)
+provides_tools:
+  - quiz
+  - md_log
+provides_hooks:
+  - post_llm_call
