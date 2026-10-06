@@ -25,7 +25,7 @@
  */
 
 import { spawnSync } from "node:child_process"
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { basename, dirname, extname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -156,6 +156,9 @@ function renderMermaid(sourcePath, outPath) {
         " (or set LEARN_CHROME=/path/to/chrome).",
     )
   }
+  // Chrome's profile goes in TMPDIR. Hermes points TMPDIR at a scratch dir under
+  // HERMES_HOME, which may be a virtiofs/network mount Chrome can't mmap from — so
+  // give it a work dir on local disk instead.
   const workDir = mkdtempLike("mmdc")
   const cfgPath = join(workDir, "puppeteer.json")
   writeFileSync(
@@ -166,8 +169,9 @@ function renderMermaid(sourcePath, outPath) {
   const res = spawnSync(MMDC_BIN, ["-i", sourcePath, "-o", outPath, "-p", cfgPath, "-s", "2", "-b", "white", "-q"], {
     encoding: "utf8",
     timeout: RENDER_TIMEOUT_MS,
-    env: { ...process.env, PUPPETEER_SKIP_DOWNLOAD: "1" },
+    env: { ...process.env, PUPPETEER_SKIP_DOWNLOAD: "1", TMPDIR: workDir, TMP: workDir, TEMP: workDir },
   })
+  rmSync(workDir, { recursive: true, force: true })
   if (res.status !== 0 || !existsSync(outPath)) {
     const detail = (res.stderr || res.stdout || String(res.error || "unknown error")).split("\n").slice(-30).join("\n")
     fail(`Mermaid render FAILED — no image produced. Fix the source and render again.\n\n${detail}`)
@@ -212,8 +216,21 @@ async function renderSvg(sourcePath, outPath) {
   fail(`SVG render FAILED — no image produced. Fix the source and render again.\n\n${errors.join("\n")}`)
 }
 
+/** A temp root on local disk: /tmp or /var/tmp when writable, else the OS default. */
+function localTmpRoot() {
+  for (const dir of ["/tmp", "/var/tmp"]) {
+    try {
+      accessSync(dir, constants.W_OK)
+      return dir
+    } catch {
+      // not writable here
+    }
+  }
+  return tmpdir()
+}
+
 function mkdtempLike(group) {
-  const dir = join(tmpdir(), "learn-viz", `${group}-${process.pid}-${Date.now()}`)
+  const dir = join(localTmpRoot(), "learn-viz-work", `${group}-${process.pid}-${Date.now()}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -296,12 +313,14 @@ async function main() {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "") || "viz"
-    const staged = join(mkdtempLike("publish"), "render.png")
+    const stagingDir = mkdtempLike("publish")
+    const staged = join(stagingDir, "render.png")
     await renderTo(source, staged)
     mkdirSync(vizDir, { recursive: true })
     const filename = `viz-${clean}-${Date.now()}.png`
     const dest = join(vizDir, filename)
     copyFileSync(staged, dest)
+    rmSync(stagingDir, { recursive: true, force: true })
     process.stdout.write(`Published.\nfilename: ${filename}\npath: ${dest}\n`)
     return
   }

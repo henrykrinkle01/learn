@@ -33,7 +33,7 @@ Look by asking `vision_analyze` for an exhaustive, literal description — not a
 5. **Iterate** with `patch` and re-render. A few passes is normal. If the render prints an error instead of a PNG path, read it, fix the source, re-render.
 6. **Publish** once it is correct and clean: `viz.mjs publish … --slug <short-kebab-topic>`. That writes the PNG with a unique filename. Look at the published file one last time.
 
-If the helper reports a missing renderer (no headless Chrome, mmdc not installed), run the `setup.sh` next to `viz.mjs` once, then retry. If that fails too, return `RESULT: NONE` with the error.
+If the helper reports a missing renderer (no headless Chrome, mmdc not installed), run the `setup.sh` next to `viz.mjs` once, then retry. Any other failure that isn't about your diagram source (the browser won't launch, a crash): don't debug or work around the toolchain — no package installs, no scripts of your own — return `RESULT: NONE` with the error text.
 
 ## Your output
 
